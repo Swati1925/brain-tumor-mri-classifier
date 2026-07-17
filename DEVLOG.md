@@ -161,3 +161,35 @@ Chose not to pursue further TTA/augmentation experiments after reviewing recent 
 
 ### Next up
 - Grad-CAM explainability — specifically checking where the model was "looking" on the 7 confidently-wrong, high-risk Glioma→Notumor cases, to see if they show signs of shortcut learning (e.g., attending to scan artifacts) or genuinely ambiguous/small tumor regions
+
+## Day 4 (continued) — Grad-CAM Explainability (Section 9)
+
+### What I did
+
+Applied Grad-CAM to the final ResNet50 model (targeting `layer4`, the last convolutional block) to visualize what the model attends to when making predictions — specifically investigating the 7 confidently-wrong, high-risk Glioma→Notumor cases identified via MC Dropout in Section 8.
+
+**Comparison: correct vs. dangerous-wrong Glioma predictions**
+
+- **Correct Glioma predictions:** Grad-CAM heatmaps consistently showed a single, large, high-intensity activation blob — closely resembling an actual tumor mass in shape and concentration
+- **Confidently-wrong cases (Glioma→Notumor):** Heatmaps showed diffuse, scattered attention across multiple weaker regions, with no comparable concentrated "mass" signal. In 2 of 7 cases, attention concentrated heavily on the ventricles (a normal anatomical structure present in all brains) rather than any tumor-specific region
+
+**Reassuring finding:** No evidence of the shortcut-learning risk flagged during EDA (Day 1) — attention in all 7 dangerous cases fell on genuine brain tissue, never on scan borders, artifacts, or text markers.
+
+### Interpretation
+
+The qualitative difference between correct and incorrect cases suggests the model has learned a genuine "large, coherent mass" detector for Glioma, and its failures cluster around cases where the tumor is likely small, subtle, or diffuse — rather than the model learning spurious, irrelevant patterns. This is a data-driven hypothesis for *why* these specific cases are hard, generated directly from the explainability analysis rather than assumed.
+
+### Future work identified (not implemented — outside current scope)
+
+Based on this finding, two complementary preprocessing changes were identified as the most promising next steps if pursued further:
+1. **ROI-based cropping** — removing irrelevant skull/background regions before classification (shown to help in related literature on this dataset)
+2. **Higher input resolution** (e.g., 384×384 instead of 224×224)
+
+These were evaluated as synergistic rather than independent: cropping removes wasted background pixels, allowing the subsequent resolution increase to effectively "zoom in" on brain tissue rather than upscaling irrelevant background — giving small/subtle tumors more effective pixel-detail than either change alone. Not pursued in this project due to scope (consistent with the Day 1 decision to exclude segmentation-level work) and to prioritize completing the uncertainty estimation and deployment stages within the available time.
+
+### Key learnings
+- Grad-CAM is most useful when compared *between* correct and incorrect predictions of the same class, not viewed in isolation — the qualitative contrast (concentrated blob vs. diffuse attention) was far more informative than either set of images alone
+- Explainability findings can generate concrete, testable hypotheses for future improvement (small/subtle tumor detection) even when not pursued immediately — this is more valuable than a vague "more data would help" conclusion
+
+### Next up
+- Deployment: Gradio interface combining prediction + confidence + MC Dropout uncertainty + Grad-CAM heatmap, deployed to Hugging Face Spaces
