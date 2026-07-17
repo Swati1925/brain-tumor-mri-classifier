@@ -125,3 +125,39 @@ Chose not to pursue further TTA/augmentation experiments after reviewing recent 
 - Grad-CAM explainability
 - Deployment (Gradio + Hugging Face Spaces)
 - 
+## Day 4 — Monte Carlo Dropout (Section 8)
+
+### What I did
+
+**Architecture issue discovered:** Standard torchvision ResNet50 has no Dropout layers — MC Dropout requires them to generate stochastic predictions. Added a `Dropout(0.3)` layer before the final classifier (`fc`), transferred the existing backbone weights from the Seed-7 checkpoint (chosen earlier as the seed closest to the 5-seed mean), and briefly fine-tuned (3 epochs, very low LR) to let the model adjust to the new layer. Val accuracy after this step: 97.95%.
+
+**Implementation bug (caught and fixed):** Initial MC Dropout implementation used `model.train()` to activate Dropout, which — as an unintended side effect — also switched BatchNorm out of its stable "running statistics" mode and into per-batch statistics mode. Since inference was done one image at a time (batch size 1), BatchNorm statistics became unstable, causing MC Dropout mean-prediction accuracy to collapse to 70.3% (vs. ~94% expected). Fixed by writing an `enable_dropout_only()` helper that calls `model.eval()` (keeping BatchNorm stable) and then manually switches only `nn.Dropout` modules to train mode. After the fix, MC Dropout mean-prediction accuracy matched expected single-pass performance (94.44%), confirming correctness.
+
+**MC Dropout run:** 30 stochastic forward passes per test image (1,600 images), using predictive standard deviation as the uncertainty score.
+
+### Results
+
+**Uncertainty separates correct from incorrect predictions clearly:**
+
+| | Mean Uncertainty |
+|---|---|
+| Correct predictions | 0.0073 |
+| Incorrect predictions | 0.0907 (**12.4x higher**) |
+| Glioma correct | 0.0102 |
+| Glioma incorrect | 0.0815 (**8.0x higher**) |
+
+**Threshold-based triage analysis:** Flagging predictions with uncertainty > 0.01 for manual review:
+- Only 13.9% of all test images would need manual review
+- 82.0% of all model errors fall within this flagged set
+- Overall "silent" (undetected) errors reduced from 97 → 16
+
+**Glioma-specific:** Of 74 total Glioma errors, 60 (81.1%) were caught by the same threshold. Of the 14 that were missed (confidently wrong), 7 were the most dangerous type — Glioma misclassified as No-Tumor with low uncertainty. This is an important, honestly-reported limitation: uncertainty estimation substantially reduces but does not eliminate the risk of silent, confidently-wrong predictions on the most clinically dangerous error type.
+
+### Key learnings
+- MC Dropout requires the model to actually contain Dropout layers — this isn't automatic, and needs to be verified per-architecture rather than assumed (ResNet50 has none by default; the baseline CNN and EfficientNetB0 did)
+- `model.train()` affects **all** layers with train/eval-dependent behavior, not just Dropout — BatchNorm's per-batch statistics can silently corrupt predictions when doing single-image inference. The fix is to selectively enable only the desired layer type
+- Uncertainty-based triage was far more effective at reducing dangerous silent errors (~80% reduction) than any of the four retraining-based interventions attempted in Section 6/7 (0-2 point recall improvements) — reframing the problem from "make the model always right" to "make the model know when it might be wrong" was a more productive direction
+- Even a strong uncertainty signal isn't a complete solution — 7 of 74 Glioma errors remained both confidently wrong *and* the most dangerous error type, underscoring that this should be treated as a complementary safety layer, not a replacement for careful validation
+
+### Next up
+- Grad-CAM explainability — specifically checking where the model was "looking" on the 7 confidently-wrong, high-risk Glioma→Notumor cases, to see if they show signs of shortcut learning (e.g., attending to scan artifacts) or genuinely ambiguous/small tumor regions
