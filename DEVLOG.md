@@ -193,3 +193,37 @@ These were evaluated as synergistic rather than independent: cropping removes wa
 
 ### Next up
 - Deployment: Gradio interface combining prediction + confidence + MC Dropout uncertainty + Grad-CAM heatmap, deployed to Hugging Face Spaces
+
+## Day 5 — Deployment & External Validation (Sections 10-11)
+
+### What I did — Deployment (Section 10)
+
+- Built a combined inference pipeline: MC Dropout prediction (30 passes) + uncertainty score + Grad-CAM heatmap, wrapped in a single function
+- Created a Gradio interface (prediction confidence bars, text summary with uncertainty flag, Grad-CAM overlay) with a clear "not for clinical use" disclaimer in the description, per the project's original scope constraints
+- Tested with 4 sample images (one per class) via a temporary Gradio share link
+
+**Notable live test result:** On a Glioma test sample, the model predicted Meningioma (incorrect) — but the uncertainty system correctly flagged it as high-risk (uncertainty score 0.1799, ~18x above the 0.01 threshold), while the Grad-CAM heatmap showed diffuse, split attention (two separate weaker hotspots) rather than the single concentrated blob seen in confident, correct predictions. This single example demonstrated the full pipeline — classification, uncertainty estimation, and explainability — working together exactly as designed: even on a genuine model failure, the system did not fail silently.
+
+### What I did — External Dataset Validation (Section 11)
+
+Attempted to validate the model's generalization on data outside the original training distribution, without any retraining:
+
+**Dataset 1 — Figshare (rejected):** Research revealed this dataset was one of the original three sources (figshare, SARTAJ, Br35H) combined to build our training data — in fact, our training data's Glioma class specifically was sourced from Figshare after the SARTAJ Glioma folder was found to be unreliable. Testing on Figshare would risk data leakage (near-duplicate images already seen in training) rather than genuine external validation, so this was avoided.
+
+**Dataset 2 — SARTAJ (used):** Since SARTAJ's Glioma folder was explicitly excluded from our training data (due to a known labeling-quality issue documented by the original dataset curator), this offered a cleaner, largely-unseen external test — though the Glioma results specifically needed to be interpreted with that caveat in mind.
+
+**Results (394 external test images, no retraining):**
+
+| Class | External Accuracy |
+|---|---|
+| Meningioma | 93.91% |
+| No Tumor | 97.14% |
+| Pituitary | 93.24% |
+| Glioma | 26.00% |
+
+**Meningioma, No-Tumor, and Pituitary accuracy closely matched held-out test-set performance (93-97%)** — strong evidence the model learned genuinely generalizable features for these classes, not just training-set-specific artifacts.
+
+**Glioma accuracy dropped sharply (26%).** Visual inspection of the SARTAJ Glioma samples showed many ring-enhancing lesions (bright rim, darker center) — a presentation notably different from the solid, uniform bright masses that characterized correctly-classified Glioma cases in Grad-CAM analysis (Section 9). Rather than attributing this solely to the known label-quality caveat, the more actionable interpretation is a genuine distribution shift: the model learned to recognize one visual presentation of Glioma well (solid masses) but generalizes poorly to another common, clinically valid presentation (ring-enhancement) that was likely underrepresented in training.
+
+### Key learnings
+- Before using any "external" dataset for validation, its provenance must be checked — several popular Kaggle brain tumor datasets are recombinations of the same small set of original sources (figshare/SARTAJ/Br35H), creating a real risk of accidentally testing on
