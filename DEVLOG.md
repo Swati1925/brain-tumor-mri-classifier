@@ -117,6 +117,9 @@ Reloaded each of the 5 saved seed-models and generated confusion matrices to che
 - **Aggregate metrics hide clinically important detail** — recall alone didn't distinguish "dangerous" false negatives from "less severe" misclassifications; confusion-matrix-level, error-type-specific analysis was necessary
 - Multiple targeted interventions (weighted loss, deeper fine-tuning) can fail to move a metric — this is itself a valid, useful finding, not a wasted effort, if the reasoning and results are documented honestly
 
+
+Chose not to pursue further TTA/augmentation experiments after reviewing recent literature (Medeiros, 2026) showing TTA degrades accuracy in 11/12 tested medical imaging configurations due to distribution shift — reinforcing that the reproducibility-variance we observed wasn't unique to this project, and that MC Dropout-based uncertainty estimation is a more principled path forward than continued ad-hoc augmentation tuning
+
 ### Next up
 - Monte Carlo Dropout for uncertainty estimation on the final ResNet50 model — specifically testing whether predictive uncertainty is elevated on the ~83 average Glioma misclassifications identified above, since two targeted retraining strategies (Attempts 1 and 2) and augmentation-based fixes failed to meaningfully close this gap
 - Grad-CAM explainability
